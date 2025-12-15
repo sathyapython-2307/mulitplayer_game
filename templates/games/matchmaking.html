@@ -1,0 +1,51 @@
+{% extends 'base.html' %}
+{% block title %}Quick Match{% endblock %}
+{% block extra_css %}
+<style>
+    .matchmaking-spinner { width: 100px; height: 100px; border-width: 5px; }
+    .pulse { animation: pulse 2s infinite; }
+    @keyframes pulse {
+        0%, 100% { transform: scale(1); opacity: 1; }
+        50% { transform: scale(1.1); opacity: 0.7; }
+    }
+</style>
+{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header text-center">
+                <h5 class="mb-0"><i class="bi bi-lightning"></i> Quick Match</h5>
+            </div>
+            <div class="card-body text-center py-5">
+                <div class="spinner-border matchmaking-spinner text-warm pulse mb-4" role="status"></div>
+                <h4 id="status-text">Finding opponent...</h4>
+                <p class="text-muted" id="status-sub">Please wait while we match you with another player</p>
+                <div class="mt-4">
+                    <a href="{% url 'lobby' %}" class="btn btn-outline-warm">Cancel</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+const wsScheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
+const socket = new WebSocket(`${wsScheme}://${window.location.host}/ws/matchmaking/`);
+
+socket.onmessage = (e) => {
+    const data = JSON.parse(e.data);
+    if (data.type === 'match_found') {
+        document.getElementById('status-text').textContent = 'Match found!';
+        document.getElementById('status-sub').textContent = 'Redirecting to game room...';
+        setTimeout(() => window.location.href = `/room/${data.room_code}/`, 1000);
+    }
+};
+
+socket.onerror = () => {
+    document.getElementById('status-text').textContent = 'Connection error';
+    document.getElementById('status-sub').textContent = 'Please try again';
+};
+</script>
+{% endblock %}

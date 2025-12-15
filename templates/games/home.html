@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+{% block title %}Welcome - Gaming Platform{% endblock %}
+{% block content %}
+<div class="row align-items-center min-vh-75">
+    <div class="col-lg-6 mb-4">
+        <h1 class="display-4 fw-bold text-warm mb-3">Real-Time Multiplayer Gaming</h1>
+        <p class="lead mb-4">Join the action! Create rooms, challenge friends, and compete in real-time with players worldwide.</p>
+        <div class="d-flex gap-3 flex-wrap">
+            {% if user.is_authenticated %}
+            <a href="{% url 'lobby' %}" class="btn btn-warm btn-lg px-4">
+                <i class="bi bi-play-fill"></i> Enter Lobby
+            </a>
+            <a href="{% url 'matchmaking' %}" class="btn btn-outline-warm btn-lg px-4">
+                <i class="bi bi-lightning"></i> Quick Match
+            </a>
+            {% else %}
+            <a href="{% url 'register' %}" class="btn btn-warm btn-lg px-4">
+                <i class="bi bi-person-plus"></i> Get Started
+            </a>
+            <a href="{% url 'login' %}" class="btn btn-outline-warm btn-lg px-4">
+                <i class="bi bi-box-arrow-in-right"></i> Login
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card p-4">
+            <div class="row text-center">
+                <div class="col-4">
+                    <i class="bi bi-people-fill display-4 text-warm"></i>
+                    <h5 class="mt-2">Matchmaking</h5>
+                    <small>Find opponents instantly</small>
+                </div>
+                <div class="col-4">
+                    <i class="bi bi-chat-dots-fill display-4 text-warm"></i>
+                    <h5 class="mt-2">Live Chat</h5>
+                    <small>Talk with players</small>
+                </div>
+                <div class="col-4">
+                    <i class="bi bi-trophy-fill display-4 text-warm"></i>
+                    <h5 class="mt-2">Compete</h5>
+                    <small>Climb the ranks</small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,218 @@
+{% extends 'base.html' %}
+{% block title %}{{ room.name }} - Game Room{% endblock %}
+{% block extra_css %}
+<style>
+    .game-container { min-height: 400px; background: var(--warm-card); border-radius: 15px; }
+    .chat-box { height: 300px; overflow-y: auto; background: #fff; border-radius: 10px; }
+    .chat-message { padding: 8px 12px; margin: 5px; border-radius: 10px; background: var(--warm-bg); }
+    .chat-message.own { background: linear-gradient(135deg, var(--warm-primary), var(--warm-secondary)); color: white; margin-left: 20%; }
+    .chat-message.other { margin-right: 20%; }
+    .player-card { padding: 10px; background: var(--warm-bg); border-radius: 10px; margin-bottom: 10px; }
+    .player-card.host { border-left: 4px solid var(--warm-primary); }
+    .game-board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; max-width: 300px; margin: 0 auto; }
+    .game-cell { aspect-ratio: 1; background: var(--warm-bg); border-radius: 10px; font-size: 2rem; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; }
+    .game-cell:hover { background: var(--warm-light); transform: scale(1.05); }
+    .game-cell.x { color: var(--warm-primary); }
+    .game-cell.o { color: var(--warm-dark); }
+</style>
+{% endblock %}
+{% block content %}
+<div class="row">
+    <div class="col-lg-8 mb-4">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <div>
+                    <h5 class="mb-0">{{ room.name }}</h5>
+                    <small>Room Code: <strong>{{ room.code }}</strong></small>
+                </div>
+                <div>
+                    <span class="badge bg-light text-dark me-2" id="room-status">{{ room.get_status_display }}</span>
+                    <a href="{% url 'leave_room' room.code %}" class="btn btn-light btn-sm">Leave</a>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="game-container p-4" id="game-area">
+                    <div id="waiting-screen" class="text-center py-5">
+                        <div class="spinner-border text-warm mb-3" role="status"></div>
+                        <h4>Waiting for players...</h4>
+                        <p class="text-muted">Share code: <strong>{{ room.code }}</strong></p>
+                        {% if room.host == user %}
+                        <button class="btn btn-warm mt-3" id="start-game-btn" disabled>
+                            <i class="bi bi-play-fill"></i> Start Game
+                        </button>
+                        {% endif %}
+                    </div>
+                    <div id="game-screen" class="d-none">
+                        <h4 class="text-center mb-4">Tic-Tac-Toe</h4>
+                        <div class="game-board" id="game-board"></div>
+                        <div class="text-center mt-4">
+                            <p id="game-status" class="h5"></p>
+                            <button class="btn btn-warm d-none" id="reset-btn">Play Again</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card mb-4">
+            <div class="card-header"><h6 class="mb-0"><i class="bi bi-people"></i> Players (<span id="player-count">0</span>/{{ room.max_players }})</h6></div>
+            <div class="card-body" id="players-list"></div>
+        </div>
+        <div class="card">
+            <div class="card-header"><h6 class="mb-0"><i class="bi bi-chat-dots"></i> Chat</h6></div>
+            <div class="card-body p-2">
+                <div class="chat-box p-2" id="chat-messages"></div>
+                <div class="input-group mt-2">
+                    <input type="text" class="form-control" id="chat-input" placeholder="Type a message...">
+                    <button class="btn btn-warm" id="send-chat"><i class="bi bi-send"></i></button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+const roomCode = '{{ room.code }}';
+const currentUser = '{{ user.username }}';
+const isHost = {{ room.host.id }} === {{ user.id }};
+let socket, gameState = { board: Array(9).fill(''), currentPlayer: 'X', players: {}, gameOver: false };
+
+function connect() {
+    const wsScheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    socket = new WebSocket(`${wsScheme}://${window.location.host}/ws/room/${roomCode}/`);
+    
+    socket.onmessage = (e) => {
+        const data = JSON.parse(e.data);
+        if (data.type === 'chat') addChatMessage(data.username, data.message);
+        else if (data.type === 'player_update') updatePlayers(data.players);
+        else if (data.type === 'game_started') startGame();
+        else if (data.type === 'game_action') handleGameAction(data);
+        else if (data.type === 'state_sync') syncState(data.state);
+    };
+    socket.onclose = () => setTimeout(connect, 3000);
+}
+
+function updatePlayers(players) {
+    document.getElementById('player-count').textContent = players.length;
+    document.getElementById('players-list').innerHTML = players.map((p, i) => 
+        `<div class="player-card ${i === 0 ? 'host' : ''}">
+            <i class="bi bi-person-fill text-warm"></i> ${p} ${i === 0 ? '<span class="badge badge-warm">Host</span>' : ''}
+        </div>`
+    ).join('');
+    
+    const startBtn = document.getElementById('start-game-btn');
+    if (startBtn) startBtn.disabled = players.length < 2;
+    
+    if (Object.keys(gameState.players).length === 0 && players.length >= 2) {
+        gameState.players[players[0]] = 'X';
+        gameState.players[players[1]] = 'O';
+    }
+}
+
+function addChatMessage(username, message) {
+    const div = document.createElement('div');
+    div.className = `chat-message ${username === currentUser ? 'own' : 'other'}`;
+    div.innerHTML = `<small class="fw-bold">${username}</small><br>${message}`;
+    document.getElementById('chat-messages').appendChild(div);
+    div.scrollIntoView();
+}
+
+function startGame() {
+    document.getElementById('waiting-screen').classList.add('d-none');
+    document.getElementById('game-screen').classList.remove('d-none');
+    document.getElementById('room-status').textContent = 'Playing';
+    renderBoard();
+    updateGameStatus();
+}
+
+function renderBoard() {
+    const board = document.getElementById('game-board');
+    board.innerHTML = gameState.board.map((cell, i) => 
+        `<div class="game-cell ${cell.toLowerCase()}" data-index="${i}">${cell}</div>`
+    ).join('');
+    board.querySelectorAll('.game-cell').forEach(cell => {
+        cell.addEventListener('click', () => makeMove(parseInt(cell.dataset.index)));
+    });
+}
+
+function makeMove(index) {
+    const mySymbol = gameState.players[currentUser];
+    if (gameState.board[index] || gameState.currentPlayer !== mySymbol || gameState.gameOver) return;
+    
+    gameState.board[index] = mySymbol;
+    gameState.currentPlayer = mySymbol === 'X' ? 'O' : 'X';
+    checkWinner();
+    
+    socket.send(JSON.stringify({ type: 'game_state', state: gameState }));
+    renderBoard();
+    updateGameStatus();
+}
+
+function checkWinner() {
+    const wins = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+    for (const [a,b,c] of wins) {
+        if (gameState.board[a] && gameState.board[a] === gameState.board[b] && gameState.board[a] === gameState.board[c]) {
+            gameState.winner = gameState.board[a];
+            gameState.gameOver = true;
+            return;
+        }
+    }
+    if (!gameState.board.includes('')) { gameState.gameOver = true; gameState.winner = 'draw'; }
+}
+
+function updateGameStatus() {
+    const status = document.getElementById('game-status');
+    const resetBtn = document.getElementById('reset-btn');
+    if (gameState.gameOver) {
+        if (gameState.winner === 'draw') status.textContent = "It's a draw!";
+        else {
+            const winner = Object.keys(gameState.players).find(p => gameState.players[p] === gameState.winner);
+            status.textContent = `${winner} wins!`;
+        }
+        if (isHost) resetBtn.classList.remove('d-none');
+    } else {
+        const current = Object.keys(gameState.players).find(p => gameState.players[p] === gameState.currentPlayer);
+        status.textContent = current === currentUser ? "Your turn!" : `${current}'s turn`;
+    }
+}
+
+function syncState(state) {
+    gameState = state;
+    renderBoard();
+    updateGameStatus();
+}
+
+function handleGameAction(data) {
+    if (data.action === 'reset') {
+        gameState = { board: Array(9).fill(''), currentPlayer: 'X', players: gameState.players, gameOver: false };
+        renderBoard();
+        updateGameStatus();
+        document.getElementById('reset-btn').classList.add('d-none');
+    }
+}
+
+document.getElementById('send-chat').addEventListener('click', () => {
+    const input = document.getElementById('chat-input');
+    if (input.value.trim()) {
+        socket.send(JSON.stringify({ type: 'chat', message: input.value }));
+        input.value = '';
+    }
+});
+
+document.getElementById('chat-input').addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') document.getElementById('send-chat').click();
+});
+
+const startBtn = document.getElementById('start-game-btn');
+if (startBtn) startBtn.addEventListener('click', () => socket.send(JSON.stringify({ type: 'start_game' })));
+
+const resetBtn = document.getElementById('reset-btn');
+resetBtn.addEventListener('click', () => {
+    socket.send(JSON.stringify({ type: 'game_action', action: 'reset' }));
+});
+
+connect();
+</script>
+{% endblock %}

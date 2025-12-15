@@ -1,0 +1,34 @@
+{% extends 'base.html' %}
+{% block title %}Create Room{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-plus-circle"></i> Create Game Room</h5>
+            </div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label class="form-label">Room Name</label>
+                        <input type="text" name="name" class="form-control" placeholder="{{ user.username }}'s Room" value="{{ user.username }}'s Room">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Max Players</label>
+                        <select name="max_players" class="form-select">
+                            <option value="2">2 Players</option>
+                            <option value="4" selected>4 Players</option>
+                            <option value="6">6 Players</option>
+                        </select>
+                    </div>
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-warm"><i class="bi bi-check-lg"></i> Create Room</button>
+                        <a href="{% url 'lobby' %}" class="btn btn-outline-warm">Cancel</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Gaming Platform{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        :root {
+            --warm-primary: #e85d04;
+            --warm-secondary: #f48c06;
+            --warm-accent: #faa307;
+            --warm-light: #ffba08;
+            --warm-bg: #fef3e2;
+            --warm-dark: #9d4a04;
+            --warm-text: #5c3d2e;
+            --warm-card: #fff8f0;
+        }
+        body {
+            background: linear-gradient(135deg, var(--warm-bg) 0%, #ffecd2 100%);
+            min-height: 100vh;
+            color: var(--warm-text);
+            font-family: 'Segoe UI', system-ui, sans-serif;
+        }
+        .navbar {
+            background: linear-gradient(90deg, var(--warm-primary), var(--warm-secondary)) !important;
+            box-shadow: 0 2px 15px rgba(232, 93, 4, 0.3);
+        }
+        .navbar-brand, .nav-link { color: white !important; }
+        .nav-link:hover { color: var(--warm-light) !important; }
+        .btn-warm {
+            background: linear-gradient(135deg, var(--warm-primary), var(--warm-secondary));
+            border: none; color: white;
+            transition: all 0.3s ease;
+        }
+        .btn-warm:hover {
+            background: linear-gradient(135deg, var(--warm-dark), var(--warm-primary));
+            color: white; transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(232, 93, 4, 0.4);
+        }
+        .btn-outline-warm {
+            border: 2px solid var(--warm-primary);
+            color: var(--warm-primary);
+        }
+        .btn-outline-warm:hover {
+            background: var(--warm-primary);
+            color: white;
+        }
+        .card {
+            background: var(--warm-card);
+            border: none; border-radius: 15px;
+            box-shadow: 0 4px 20px rgba(232, 93, 4, 0.1);
+        }
+        .card-header {
+            background: linear-gradient(135deg, var(--warm-primary), var(--warm-secondary));
+            color: white; border-radius: 15px 15px 0 0 !important;
+        }
+        .form-control:focus {
+            border-color: var(--warm-primary);
+            box-shadow: 0 0 0 0.2rem rgba(232, 93, 4, 0.25);
+        }
+        .badge-warm {
+            background: var(--warm-accent);
+            color: var(--warm-dark);
+        }
+        .text-warm { color: var(--warm-primary); }
+        .bg-warm { background-color: var(--warm-primary); }
+    </style>
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark mb-4">
+        <div class="container">
+            <a class="navbar-brand fw-bold" href="{% url 'home' %}">
+                <i class="bi bi-controller"></i> GameHub
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    {% if user.is_authenticated %}
+                    <li class="nav-item"><a class="nav-link" href="{% url 'lobby' %}"><i class="bi bi-door-open"></i> Lobby</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{% url 'matchmaking' %}"><i class="bi bi-people"></i> Quick Match</a></li>
+                    {% endif %}
+                </ul>
+                <ul class="navbar-nav">
+                    {% if user.is_authenticated %}
+                    <li class="nav-item"><span class="nav-link"><i class="bi bi-person-circle"></i> {{ user.username }}</span></li>
+                    <li class="nav-item"><a class="nav-link" href="{% url 'logout' %}"><i class="bi bi-box-arrow-right"></i> Logout</a></li>
+                    {% else %}
+                    <li class="nav-item"><a class="nav-link" href="{% url 'login' %}"><i class="bi bi-box-arrow-in-right"></i> Login</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{% url 'register' %}"><i class="bi bi-person-plus"></i> Register</a></li>
+                    {% endif %}
+                </ul>
+            </div>
+        </div>
+    </nav>
+    <main class="container">
+        {% if messages %}
+        {% for message in messages %}
+        <div class="alert alert-warning alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        {% endfor %}
+        {% endif %}
+        {% block content %}{% endblock %}
+    </main>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>
