@@ -8,64 +8,64 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
     <style>
         :root {
-            --warm-primary: #e85d04;
-            --warm-secondary: #f48c06;
-            --warm-accent: #faa307;
-            --warm-light: #ffba08;
-            --warm-bg: #fef3e2;
-            --warm-dark: #9d4a04;
-            --warm-text: #5c3d2e;
-            --warm-card: #fff8f0;
+            --teal-primary: #0d9488;
+            --teal-secondary: #14b8a6;
+            --teal-accent: #2dd4bf;
+            --teal-light: #5eead4;
+            --teal-bg: #e6fffa;
+            --teal-dark: #0f766e;
+            --teal-text: #134e4a;
+            --teal-card: #f0fdfa;
         }
         body {
-            background: linear-gradient(135deg, var(--warm-bg) 0%, #ffecd2 100%);
+            background: linear-gradient(135deg, var(--teal-bg) 0%, #ccfbf1 100%);
             min-height: 100vh;
-            color: var(--warm-text);
+            color: var(--teal-text);
             font-family: 'Segoe UI', system-ui, sans-serif;
         }
         .navbar {
-            background: linear-gradient(90deg, var(--warm-primary), var(--warm-secondary)) !important;
-            box-shadow: 0 2px 15px rgba(232, 93, 4, 0.3);
+            background: linear-gradient(90deg, var(--teal-primary), var(--teal-secondary)) !important;
+            box-shadow: 0 2px 15px rgba(13, 148, 136, 0.3);
         }
         .navbar-brand, .nav-link { color: white !important; }
-        .nav-link:hover { color: var(--warm-light) !important; }
+        .nav-link:hover { color: var(--teal-light) !important; }
         .btn-warm {
-            background: linear-gradient(135deg, var(--warm-primary), var(--warm-secondary));
+            background: linear-gradient(135deg, var(--teal-primary), var(--teal-secondary));
             border: none; color: white;
             transition: all 0.3s ease;
         }
         .btn-warm:hover {
-            background: linear-gradient(135deg, var(--warm-dark), var(--warm-primary));
+            background: linear-gradient(135deg, var(--teal-dark), var(--teal-primary));
             color: white; transform: translateY(-2px);
-            box-shadow: 0 4px 15px rgba(232, 93, 4, 0.4);
+            box-shadow: 0 4px 15px rgba(13, 148, 136, 0.4);
         }
         .btn-outline-warm {
-            border: 2px solid var(--warm-primary);
-            color: var(--warm-primary);
+            border: 2px solid var(--teal-primary);
+            color: var(--teal-primary);
         }
         .btn-outline-warm:hover {
-            background: var(--warm-primary);
+            background: var(--teal-primary);
             color: white;
         }
         .card {
-            background: var(--warm-card);
+            background: var(--teal-card);
             border: none; border-radius: 15px;
-            box-shadow: 0 4px 20px rgba(232, 93, 4, 0.1);
+            box-shadow: 0 4px 20px rgba(13, 148, 136, 0.1);
         }
         .card-header {
-            background: linear-gradient(135deg, var(--warm-primary), var(--warm-secondary));
+            background: linear-gradient(135deg, var(--teal-primary), var(--teal-secondary));
             color: white; border-radius: 15px 15px 0 0 !important;
         }
         .form-control:focus {
-            border-color: var(--warm-primary);
-            box-shadow: 0 0 0 0.2rem rgba(232, 93, 4, 0.25);
+            border-color: var(--teal-primary);
+            box-shadow: 0 0 0 0.2rem rgba(13, 148, 136, 0.25);
         }
         .badge-warm {
-            background: var(--warm-accent);
-            color: var(--warm-dark);
+            background: var(--teal-accent);
+            color: var(--teal-dark);
         }
-        .text-warm { color: var(--warm-primary); }
-        .bg-warm { background-color: var(--warm-primary); }
+        .text-warm { color: var(--teal-primary); }
+        .bg-warm { background-color: var(--teal-primary); }
     </style>
     {% block extra_css %}{% endblock %}
 </head>

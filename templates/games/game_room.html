@@ -2,18 +2,18 @@
 {% block title %}{{ room.name }} - Game Room{% endblock %}
 {% block extra_css %}
 <style>
-    .game-container { min-height: 400px; background: var(--warm-card); border-radius: 15px; }
+    .game-container { min-height: 400px; background: var(--teal-card); border-radius: 15px; }
     .chat-box { height: 300px; overflow-y: auto; background: #fff; border-radius: 10px; }
-    .chat-message { padding: 8px 12px; margin: 5px; border-radius: 10px; background: var(--warm-bg); }
-    .chat-message.own { background: linear-gradient(135deg, var(--warm-primary), var(--warm-secondary)); color: white; margin-left: 20%; }
+    .chat-message { padding: 8px 12px; margin: 5px; border-radius: 10px; background: var(--teal-bg); }
+    .chat-message.own { background: linear-gradient(135deg, var(--teal-primary), var(--teal-secondary)); color: white; margin-left: 20%; }
     .chat-message.other { margin-right: 20%; }
-    .player-card { padding: 10px; background: var(--warm-bg); border-radius: 10px; margin-bottom: 10px; }
-    .player-card.host { border-left: 4px solid var(--warm-primary); }
+    .player-card { padding: 10px; background: var(--teal-bg); border-radius: 10px; margin-bottom: 10px; }
+    .player-card.host { border-left: 4px solid var(--teal-primary); }
     .game-board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; max-width: 300px; margin: 0 auto; }
-    .game-cell { aspect-ratio: 1; background: var(--warm-bg); border-radius: 10px; font-size: 2rem; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; }
-    .game-cell:hover { background: var(--warm-light); transform: scale(1.05); }
-    .game-cell.x { color: var(--warm-primary); }
-    .game-cell.o { color: var(--warm-dark); }
+    .game-cell { aspect-ratio: 1; background: var(--teal-bg); border-radius: 10px; font-size: 2rem; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; }
+    .game-cell:hover { background: var(--teal-light); transform: scale(1.05); }
+    .game-cell.x { color: var(--teal-primary); }
+    .game-cell.o { color: var(--teal-dark); }
 </style>
 {% endblock %}
 {% block content %}
