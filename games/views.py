@@ -92,6 +92,18 @@ def chess_matchmaking(request):
     return render(request, 'games/chess_matchmaking.html')
 
 @login_required
+def chess_vs_bot(request):
+    # Create immediate bot game
+    import random
+    game = ChessGame.objects.create(
+        white_player=request.user,
+        is_bot_game=True,
+        bot_color='black',
+        status='playing'
+    )
+    return redirect('chess_game', code=game.code)
+
+@login_required
 def chess_game(request, code):
     from .models import ChessGame
     game = get_object_or_404(ChessGame, code=code)

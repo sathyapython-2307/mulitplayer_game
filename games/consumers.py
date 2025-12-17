@@ -200,6 +200,7 @@ class ChessConsumer(AsyncWebsocketConsumer):
             'user_id': self.user.id
         })
         
+        # Only match if we have 2 or more players
         if len(ChessConsumer.waiting_players) >= 2:
             # Match two players
             p1 = ChessConsumer.waiting_players.pop(0)
@@ -211,16 +212,12 @@ class ChessConsumer(AsyncWebsocketConsumer):
                     'type': 'match_found',
                     'game_code': game.code
                 })
-        elif len(ChessConsumer.waiting_players) == 1:
-            # Create bot game for single player
-            p1 = ChessConsumer.waiting_players.pop(0)
-            game = await self.create_game(p1['user_id'], None, True)
-            
-            await self.channel_layer.send(p1['channel'], {
-                'type': 'match_found',
-                'game_code': game.code,
-                'is_bot': True
-            })
+        # If still waiting, send waiting status
+        else:
+            await self.send(text_data=json.dumps({
+                'type': 'waiting',
+                'message': 'Searching for opponent...'
+            }))
     
     async def match_found(self, event):
         await self.send(text_data=json.dumps({

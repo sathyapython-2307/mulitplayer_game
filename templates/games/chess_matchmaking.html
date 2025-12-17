@@ -20,10 +20,10 @@
             <div class="card-body text-center py-5">
                 <div class="spinner-border chess-spinner text-warm pulse mb-4" role="status"></div>
                 <h4 id="status-text">Finding opponent...</h4>
-                <p class="text-muted" id="status-sub">Matching you with another player</p>
-                <div id="bot-notice" class="alert alert-info d-none mt-4">
-                    <i class="bi bi-robot"></i> <strong>Playing vs AI</strong><br>
-                    <small>No other players available. You'll play against our chess bot!</small>
+                <p class="text-muted" id="status-sub">Searching for another player</p>
+                <div id="waiting-notice" class="alert alert-warning d-none mt-4">
+                    <i class="bi bi-hourglass-split"></i> <strong>Still searching...</strong><br>
+                    <small>Waiting for another player to join. You can also <a href="{% url 'chess_vs_bot' %}" class="alert-link">play vs bot</a> instead.</small>
                 </div>
                 <div class="mt-4">
                     <a href="{% url 'chess_lobby' %}" class="btn btn-outline-warm">Cancel</a>
@@ -38,18 +38,19 @@
 const wsScheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
 const socket = new WebSocket(`${wsScheme}://${window.location.host}/ws/chess/matchmaking/`);
 
+let waitingTimeout;
+
 socket.onmessage = (e) => {
     const data = JSON.parse(e.data);
     if (data.type === 'match_found') {
-        if (data.is_bot) {
-            document.getElementById('bot-notice').classList.remove('d-none');
-            document.getElementById('status-text').textContent = 'Match found!';
-            document.getElementById('status-sub').textContent = 'Starting game against AI...';
-        } else {
-            document.getElementById('status-text').textContent = 'Opponent found!';
-            document.getElementById('status-sub').textContent = 'Starting game...';
-        }
+        document.getElementById('status-text').textContent = 'Opponent found!';
+        document.getElementById('status-sub').textContent = 'Starting game...';
         setTimeout(() => window.location.href = `/chess/game/${data.game_code}/`, 1500);
+    } else if (data.type === 'waiting') {
+        // Show waiting notice after 5 seconds
+        waitingTimeout = setTimeout(() => {
+            document.getElementById('waiting-notice').classList.remove('d-none');
+        }, 5000);
     }
 };
 

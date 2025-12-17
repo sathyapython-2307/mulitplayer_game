@@ -13,14 +13,21 @@
                 </div>
                 <h5 class="mb-3">Welcome to Chess Multiplayer</h5>
                 <p class="text-muted mb-4">Challenge players worldwide or practice against AI</p>
-                <div class="d-grid gap-3 col-md-6 mx-auto">
-                    <a href="{% url 'chess_matchmaking' %}" class="btn btn-warm btn-lg">
-                        <i class="bi bi-lightning-fill"></i> Find Match
-                    </a>
-                    <p class="small text-muted mb-0">
-                        <i class="bi bi-info-circle"></i> Players are automatically matched in pairs. 
-                        If odd number joins, you'll play against AI.
-                    </p>
+                <div class="d-grid gap-3 col-md-8 mx-auto">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <a href="{% url 'chess_matchmaking' %}" class="btn btn-warm btn-lg w-100">
+                                <i class="bi bi-people-fill"></i> Play vs Player
+                            </a>
+                            <small class="text-muted d-block mt-2">Find a real opponent</small>
+                        </div>
+                        <div class="col-md-6">
+                            <a href="{% url 'chess_vs_bot' %}" class="btn btn-outline-warm btn-lg w-100">
+                                <i class="bi bi-robot"></i> Play vs Bot
+                            </a>
+                            <small class="text-muted d-block mt-2">Practice with AI</small>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

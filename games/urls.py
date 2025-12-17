@@ -13,5 +13,6 @@ urlpatterns = [
     path('leave-room/<str:code>/', views.leave_room, name='leave_room'),
     path('chess/', views.chess_lobby, name='chess_lobby'),
     path('chess/matchmaking/', views.chess_matchmaking, name='chess_matchmaking'),
+    path('chess/vs-bot/', views.chess_vs_bot, name='chess_vs_bot'),
     path('chess/game/<str:code>/', views.chess_game, name='chess_game'),
 ]
