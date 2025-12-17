@@ -1,0 +1,61 @@
+{% extends 'base.html' %}
+{% block title %}Finding Chess Match{% endblock %}
+{% block extra_css %}
+<style>
+    .chess-spinner { width: 100px; height: 100px; border-width: 5px; }
+    .pulse { animation: pulse 2s infinite; }
+    @keyframes pulse {
+        0%, 100% { transform: scale(1); opacity: 1; }
+        50% { transform: scale(1.1); opacity: 0.7; }
+    }
+</style>
+{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header text-center">
+                <h5 class="mb-0"><i class="bi bi-chess-queen"></i> Chess Matchmaking</h5>
+            </div>
+            <div class="card-body text-center py-5">
+                <div class="spinner-border chess-spinner text-warm pulse mb-4" role="status"></div>
+                <h4 id="status-text">Finding opponent...</h4>
+                <p class="text-muted" id="status-sub">Matching you with another player</p>
+                <div id="bot-notice" class="alert alert-info d-none mt-4">
+                    <i class="bi bi-robot"></i> <strong>Playing vs AI</strong><br>
+                    <small>No other players available. You'll play against our chess bot!</small>
+                </div>
+                <div class="mt-4">
+                    <a href="{% url 'chess_lobby' %}" class="btn btn-outline-warm">Cancel</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+const wsScheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
+const socket = new WebSocket(`${wsScheme}://${window.location.host}/ws/chess/matchmaking/`);
+
+socket.onmessage = (e) => {
+    const data = JSON.parse(e.data);
+    if (data.type === 'match_found') {
+        if (data.is_bot) {
+            document.getElementById('bot-notice').classList.remove('d-none');
+            document.getElementById('status-text').textContent = 'Match found!';
+            document.getElementById('status-sub').textContent = 'Starting game against AI...';
+        } else {
+            document.getElementById('status-text').textContent = 'Opponent found!';
+            document.getElementById('status-sub').textContent = 'Starting game...';
+        }
+        setTimeout(() => window.location.href = `/chess/game/${data.game_code}/`, 1500);
+    }
+};
+
+socket.onerror = () => {
+    document.getElementById('status-text').textContent = 'Connection error';
+    document.getElementById('status-sub').textContent = 'Please try again';
+};
+</script>
+{% endblock %}

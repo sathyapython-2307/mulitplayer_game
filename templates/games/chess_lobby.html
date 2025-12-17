@@ -1,0 +1,51 @@
+{% extends 'base.html' %}
+{% block title %}Chess Lobby{% endblock %}
+{% block content %}
+<div class="row">
+    <div class="col-lg-8 mx-auto">
+        <div class="card mb-4">
+            <div class="card-header text-center">
+                <h4 class="mb-0"><i class="bi bi-trophy"></i> Chess Arena</h4>
+            </div>
+            <div class="card-body text-center py-5">
+                <div class="mb-4">
+                    <i class="bi bi-chess-queen display-1 text-warm"></i>
+                </div>
+                <h5 class="mb-3">Welcome to Chess Multiplayer</h5>
+                <p class="text-muted mb-4">Challenge players worldwide or practice against AI</p>
+                <div class="d-grid gap-3 col-md-6 mx-auto">
+                    <a href="{% url 'chess_matchmaking' %}" class="btn btn-warm btn-lg">
+                        <i class="bi bi-lightning-fill"></i> Find Match
+                    </a>
+                    <p class="small text-muted mb-0">
+                        <i class="bi bi-info-circle"></i> Players are automatically matched in pairs. 
+                        If odd number joins, you'll play against AI.
+                    </p>
+                </div>
+            </div>
+        </div>
+        
+        {% if active_games %}
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="bi bi-controller"></i> Active Games</h6>
+            </div>
+            <div class="card-body">
+                <div class="list-group list-group-flush">
+                    {% for game in active_games %}
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>{{ game.white_player.username }}</strong> 
+                            <span class="text-muted">vs</span>
+                            <strong>{% if game.is_bot_game %}AI Bot{% else %}{{ game.black_player.username }}{% endif %}</strong>
+                        </div>
+                        <span class="badge badge-warm">{{ game.status }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

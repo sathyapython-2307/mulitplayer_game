@@ -1,8 +1,9 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import UserCreationForm
+from django.contrib.auth import logout
 from django.contrib import messages
-from .models import GameRoom, PlayerStats
+from .models import GameRoom, PlayerStats, ChessGame
 
 def home(request):
     return render(request, 'games/home.html')
@@ -18,6 +19,12 @@ def register(request):
     else:
         form = UserCreationForm()
     return render(request, 'registration/register.html', {'form': form})
+
+@login_required
+def game_selection(request):
+    if not hasattr(request.user, 'stats'):
+        PlayerStats.objects.create(user=request.user)
+    return render(request, 'games/game_selection.html')
 
 @login_required
 def lobby(request):
@@ -68,3 +75,39 @@ def leave_room(request, code):
             room.delete()
             return redirect('lobby')
     return redirect('lobby')
+
+
+def custom_logout(request):
+    logout(request)
+    return redirect('login')
+
+
+@login_required
+def chess_lobby(request):
+    active_games = ChessGame.objects.filter(status='playing').order_by('-created_at')[:10]
+    return render(request, 'games/chess_lobby.html', {'active_games': active_games})
+
+@login_required
+def chess_matchmaking(request):
+    return render(request, 'games/chess_matchmaking.html')
+
+@login_required
+def chess_game(request, code):
+    from .models import ChessGame
+    game = get_object_or_404(ChessGame, code=code)
+    
+    # Determine player color
+    player_color = None
+    opponent = None
+    if game.white_player == request.user:
+        player_color = 'white'
+        opponent = game.black_player.username if game.black_player else 'Bot'
+    elif game.black_player == request.user:
+        player_color = 'black'
+        opponent = game.white_player.username if game.white_player else 'Bot'
+    
+    return render(request, 'games/chess_game.html', {
+        'game': game,
+        'player_color': player_color,
+        'opponent': opponent
+    })

@@ -81,8 +81,9 @@
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav me-auto">
                     {% if user.is_authenticated %}
-                    <li class="nav-item"><a class="nav-link" href="{% url 'lobby' %}"><i class="bi bi-door-open"></i> Lobby</a></li>
-                    <li class="nav-item"><a class="nav-link" href="{% url 'matchmaking' %}"><i class="bi bi-people"></i> Quick Match</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{% url 'game_selection' %}"><i class="bi bi-controller"></i> Games</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{% url 'lobby' %}"><i class="bi bi-grid-3x3"></i> Tic-Tac-Toe</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{% url 'chess_lobby' %}"><i class="bi bi-chess-queen"></i> Chess</a></li>
                     {% endif %}
                 </ul>
                 <ul class="navbar-nav">
