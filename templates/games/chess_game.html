@@ -207,11 +207,33 @@
         opacity: 0.7;
     }
     
+    /* Promotion Modal */
+    .promotion-btn {
+        width: 70px;
+        height: 70px;
+        border: 2px solid var(--teal-primary);
+        border-radius: 12px;
+        background: var(--teal-bg);
+        transition: all 0.2s ease;
+    }
+    
+    .promotion-btn:hover {
+        background: var(--teal-primary);
+        transform: scale(1.1);
+    }
+    
+    .promotion-piece {
+        font-size: 2.5rem;
+        line-height: 1;
+    }
+    
     /* Responsive */
     @media (max-width: 576px) {
         .piece { font-size: 2rem; }
         .chess-board { max-width: 100%; border-width: 4px; }
         .turn-indicator { padding: 12px 15px; }
+        .promotion-btn { width: 55px; height: 55px; }
+        .promotion-piece { font-size: 2rem; }
     }
     
     @media (min-width: 768px) {
@@ -301,6 +323,34 @@
     </div>
 </div>
 
+<!-- Pawn Promotion Modal -->
+<div class="modal fade" id="promotionModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content">
+            <div class="modal-header" style="background: linear-gradient(135deg, var(--teal-primary), var(--teal-secondary)); color: white;">
+                <h5 class="modal-title"><i class="bi bi-arrow-up-circle"></i> Promote Pawn</h5>
+            </div>
+            <div class="modal-body text-center py-4">
+                <p class="mb-3">Choose a piece for promotion:</p>
+                <div class="d-flex justify-content-center gap-2 flex-wrap" id="promotion-choices">
+                    <button class="btn btn-lg promotion-btn" data-piece="q" title="Queen">
+                        <span class="promotion-piece">♕</span>
+                    </button>
+                    <button class="btn btn-lg promotion-btn" data-piece="r" title="Rook">
+                        <span class="promotion-piece">♖</span>
+                    </button>
+                    <button class="btn btn-lg promotion-btn" data-piece="b" title="Bishop">
+                        <span class="promotion-piece">♗</span>
+                    </button>
+                    <button class="btn btn-lg promotion-btn" data-piece="n" title="Knight">
+                        <span class="promotion-piece">♘</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Game Over Modal -->
 <div class="modal fade" id="gameOverModal" tabindex="-1" data-bs-backdrop="static">
     <div class="modal-dialog modal-dialog-centered">
@@ -343,6 +393,7 @@ let lastMove = null;
 let gameStatus = 'playing';
 let moveCount = 0;
 let botThinking = false;
+let pendingPromotion = null; // {from, to} for pending promotion move
 
 // Unicode chess pieces with better rendering
 const pieceSymbols = {
@@ -386,8 +437,14 @@ function connectWebSocket() {
                 updateTurnIndicator();
                 break;
                 
+            case 'check':
+                showCheckNotification(data.color);
+                break;
+                
             case 'game_over':
-                showGameOver(data.winner, data.reason);
+                gameStatus = data.status || 'finished';
+                botThinking = false;
+                showGameOver(data.status, data.winner, data.reason);
                 break;
                 
             case 'error':
@@ -469,7 +526,19 @@ function handleSquareClick(square) {
             return;
         }
         
-        // Make move
+        // Check for pawn promotion
+        const piece = boardState[selectedSquare];
+        const isPromotion = isPawnPromotion(selectedSquare, square, piece);
+        
+        if (isPromotion) {
+            // Show promotion modal
+            pendingPromotion = { from: selectedSquare, to: square };
+            showPromotionModal();
+            clearSelection();
+            return;
+        }
+        
+        // Make regular move
         if (socket && socket.readyState === WebSocket.OPEN) {
             socket.send(JSON.stringify({
                 type: 'move',
@@ -534,27 +603,63 @@ function updatePlayerHighlight() {
     }
 }
 
-function showGameOver(winner, reason) {
-    gameStatus = 'finished';
+function showCheckNotification(color) {
+    // Show brief check notification
+    const indicator = document.getElementById('turn-indicator');
+    const originalClass = indicator.className;
+    indicator.className = 'turn-indicator your-turn';
+    indicator.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-2"></i><strong>CHECK!</strong>';
+    
+    setTimeout(() => {
+        indicator.className = originalClass;
+        updateTurnIndicator();
+    }, 2000);
+}
+
+function showGameOver(status, winner, reason) {
+    gameStatus = status || 'finished';
     const modal = new bootstrap.Modal(document.getElementById('gameOverModal'));
     const winnerIcon = document.getElementById('winner-icon');
     const winnerText = document.getElementById('winner-text');
     const reasonText = document.getElementById('reason-text');
     
-    if (winner === myColor) {
-        winnerIcon.textContent = '🎉';
-        winnerText.textContent = 'Victory!';
-        winnerText.className = 'text-success';
-    } else {
-        winnerIcon.textContent = '😔';
-        winnerText.textContent = 'Defeat';
-        winnerText.className = 'text-danger';
+    // Determine outcome
+    if (status === 'checkmate') {
+        if (winner === myColor) {
+            winnerIcon.textContent = '👑';
+            winnerText.textContent = 'Checkmate - You Win!';
+            winnerText.className = 'text-success';
+        } else {
+            winnerIcon.textContent = '💔';
+            winnerText.textContent = 'Checkmate - You Lose';
+            winnerText.className = 'text-danger';
+        }
+        reasonText.textContent = reason || 'Checkmate';
+    } else if (status === 'stalemate') {
+        winnerIcon.textContent = '🤝';
+        winnerText.textContent = 'Stalemate - Draw';
+        winnerText.className = 'text-warning';
+        reasonText.textContent = reason || 'No legal moves available';
+    } else if (status === 'draw') {
+        winnerIcon.textContent = '🤝';
+        winnerText.textContent = 'Draw';
+        winnerText.className = 'text-warning';
+        reasonText.textContent = reason || 'Game drawn';
+    } else if (reason === 'resignation') {
+        if (winner === myColor) {
+            winnerIcon.textContent = '🎉';
+            winnerText.textContent = 'Victory!';
+            winnerText.className = 'text-success';
+        } else {
+            winnerIcon.textContent = '😔';
+            winnerText.textContent = 'Defeat';
+            winnerText.className = 'text-danger';
+        }
+        reasonText.textContent = winner === myColor ? 'Opponent resigned' : 'You resigned';
     }
     
-    reasonText.textContent = reason === 'resignation' 
-        ? (winner === myColor ? 'Opponent resigned' : 'You resigned')
-        : 'Checkmate';
-    
+    // Disable further moves
+    updateTurnIndicator();
     modal.show();
 }
 
@@ -567,6 +672,53 @@ document.getElementById('resign-btn').addEventListener('click', () => {
             socket.send(JSON.stringify({ type: 'resign' }));
         }
     }
+});
+
+// Pawn Promotion Functions
+function isPawnPromotion(from, to, piece) {
+    if (!piece || piece[1] !== 'p') return false;
+    const toRank = parseInt(to[1]);
+    const color = piece[0];
+    // White pawn reaching rank 8, or black pawn reaching rank 1
+    return (color === 'w' && toRank === 8) || (color === 'b' && toRank === 1);
+}
+
+function showPromotionModal() {
+    const modal = new bootstrap.Modal(document.getElementById('promotionModal'));
+    // Update piece colors based on player color
+    const isWhite = myColor === 'white';
+    const pieces = {
+        'q': isWhite ? '♕' : '♛',
+        'r': isWhite ? '♖' : '♜',
+        'b': isWhite ? '♗' : '♝',
+        'n': isWhite ? '♘' : '♞'
+    };
+    document.querySelectorAll('.promotion-btn').forEach(btn => {
+        const pieceType = btn.dataset.piece;
+        btn.querySelector('.promotion-piece').textContent = pieces[pieceType];
+    });
+    modal.show();
+}
+
+// Promotion button click handlers
+document.querySelectorAll('.promotion-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        if (!pendingPromotion) return;
+        
+        const promoteTo = btn.dataset.piece;
+        
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({
+                type: 'move',
+                from: pendingPromotion.from,
+                to: pendingPromotion.to,
+                promotion: promoteTo
+            }));
+        }
+        
+        pendingPromotion = null;
+        bootstrap.Modal.getInstance(document.getElementById('promotionModal')).hide();
+    });
 });
 
 // Initialize

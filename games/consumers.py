@@ -267,6 +267,7 @@ class ChessGameConsumer(AsyncWebsocketConsumer):
     async def handle_move(self, data):
         from_pos = data['from']
         to_pos = data['to']
+        promotion = data.get('promotion')  # 'q', 'r', 'b', 'n' for pawn promotion
         
         game = await self.get_game()
         if not game:
@@ -283,29 +284,60 @@ class ChessGameConsumer(AsyncWebsocketConsumer):
             await self.send(text_data=json.dumps({'type': 'error', 'message': 'Not your turn'}))
             return
         
-        # Make move
-        board = game.board_state
-        if from_pos not in board:
-            await self.send(text_data=json.dumps({'type': 'error', 'message': 'No piece at position'}))
+        # COMPREHENSIVE MOVE VALIDATION using chess rules engine
+        # This includes:
+        # - Piece movement rules
+        # - King safety (cannot leave king in check)
+        # - Check escape validation (if in check, move must resolve it)
+        from .chess_rules import ChessRules
+        is_valid, error_msg = ChessRules.is_valid_move(
+            game.board_state, 
+            from_pos, 
+            to_pos, 
+            game.current_turn
+        )
+        
+        if not is_valid:
+            # Check if player is in check and trying invalid move
+            if ChessRules.is_in_check(game.board_state, game.current_turn):
+                error_msg = "You are in check! You must escape check."
+            
+            await self.send(text_data=json.dumps({
+                'type': 'error', 
+                'message': f'Illegal move: {error_msg}'
+            }))
             return
         
+        # Execute move (only if validation passed)
+        board = game.board_state
         piece = board[from_pos]
         
-        # Validate piece belongs to player
-        if piece[0] != player_color[0]:
-            await self.send(text_data=json.dumps({'type': 'error', 'message': 'Not your piece'}))
-            return
+        # Handle pawn promotion
+        if piece[1] == 'p':
+            to_rank = int(to_pos[1])
+            color_code = piece[0]
+            # Check if pawn reached promotion rank
+            if (color_code == 'w' and to_rank == 8) or (color_code == 'b' and to_rank == 1):
+                # Promote pawn to chosen piece (default to queen if not specified)
+                promote_to = promotion if promotion in ['q', 'r', 'b', 'n'] else 'q'
+                piece = f"{color_code}{promote_to}"
         
-        # Execute move
         board[to_pos] = piece
         del board[from_pos]
         
         # Update game state
         next_turn = 'black' if game.current_turn == 'white' else 'white'
         move_history = list(game.move_history) if game.move_history else []
-        move_history.append({'from': from_pos, 'to': to_pos, 'piece': piece})
+        move_history.append({'from': from_pos, 'to': to_pos, 'piece': piece, 'promotion': promotion})
         
-        await self.update_game(game.code, board, next_turn, move_history)
+        # CHECK FOR END-GAME CONDITIONS (checkmate, stalemate, draw)
+        game_status, winner, reason = ChessRules.check_game_status(board, next_turn)
+        
+        # Update game in database
+        if game_status in ['checkmate', 'stalemate', 'draw']:
+            await self.finish_game(game.code, winner, game_status)
+        else:
+            await self.update_game(game.code, board, next_turn, move_history)
         
         # Broadcast move to all players
         await self.channel_layer.group_send(self.room_group_name, {
@@ -315,8 +347,26 @@ class ChessGameConsumer(AsyncWebsocketConsumer):
             'move': {'from': from_pos, 'to': to_pos, 'piece': piece}
         })
         
+        # Handle end-game notification
+        if game_status in ['checkmate', 'stalemate', 'draw']:
+            await self.channel_layer.group_send(self.room_group_name, {
+                'type': 'game_over',
+                'status': game_status,
+                'winner': winner,
+                'reason': reason
+            })
+            return  # Stop here, no bot move needed
+        
+        # Notify if in check
+        if game_status == 'check':
+            await self.channel_layer.group_send(self.room_group_name, {
+                'type': 'check_notification',
+                'color': next_turn
+            })
+        
         # Handle bot move if needed (completely non-blocking)
-        if game.is_bot_game and next_turn == game.bot_color:
+        # Bot should move when it's playing OR when it's in check (must escape)
+        if game.is_bot_game and next_turn == game.bot_color and game_status in ['playing', 'check']:
             # Notify UI that bot is thinking
             await self.channel_layer.group_send(self.room_group_name, {
                 'type': 'bot_thinking',
@@ -329,19 +379,80 @@ class ChessGameConsumer(AsyncWebsocketConsumer):
     async def make_bot_move(self, game_code):
         import asyncio
         from .chess_bot import ChessBot
+        from .chess_rules import ChessRules
         
-        # Bot thinks for exactly 2 seconds
-        await asyncio.sleep(2)
-        
-        game = await self.get_game_by_code(game_code)
-        if not game or game.status != 'playing':
+        try:
+            # Bot thinks for exactly 2 seconds
+            await asyncio.sleep(2)
+            
+            game = await self.get_game_by_code(game_code)
+            if not game or game.status != 'playing':
+                return
+            
+            # Ensure it's actually the bot's turn
+            if game.current_turn != game.bot_color:
+                return
+            
+            # Get legal move from bot using current_turn (should match bot_color)
+            move = ChessBot.make_move(game.board_state, game.current_turn)
+        except Exception as e:
+            print(f"Bot move error: {e}")
             return
         
-        move = ChessBot.make_move(game.board_state, game.bot_color)
+        if not move:
+            # Bot has no legal moves - check for checkmate or stalemate
+            game_status, winner, reason = ChessRules.check_game_status(
+                game.board_state, 
+                game.current_turn
+            )
+            
+            # Only end game if it's actually checkmate or stalemate
+            if game_status in ['checkmate', 'stalemate', 'draw']:
+                await self.finish_game(game_code, winner, game_status)
+                
+                await self.channel_layer.group_send(self.room_group_name, {
+                    'type': 'game_over',
+                    'status': game_status,
+                    'winner': winner,
+                    'reason': reason
+                })
+            else:
+                # Bot couldn't find a move but game isn't over - this shouldn't happen
+                # Try to find ANY legal move as fallback
+                print(f"Bot failed to find move but game status is: {game_status}")
+                # Notify that bot is stuck (for debugging)
+                await self.channel_layer.group_send(self.room_group_name, {
+                    'type': 'bot_thinking',
+                    'thinking': False
+                })
+            return
+        
         if move:
             from_pos, to_pos = move
+            
+            # Double-check move validity with rules engine (safety check)
+            is_valid, _ = ChessRules.is_valid_move(
+                game.board_state,
+                from_pos,
+                to_pos,
+                game.current_turn
+            )
+            
+            if not is_valid:
+                # Bot generated invalid move - skip turn (shouldn't happen)
+                return
+            
+            # Execute validated move
             board = game.board_state
             piece = board[from_pos]
+            
+            # Handle bot pawn promotion (always promote to queen)
+            if piece[1] == 'p':
+                to_rank = int(to_pos[1])
+                color_code = piece[0]
+                if (color_code == 'w' and to_rank == 8) or (color_code == 'b' and to_rank == 1):
+                    piece = f"{color_code}q"  # Bot always promotes to queen
+            
             board[to_pos] = piece
             del board[from_pos]
             
@@ -349,14 +460,37 @@ class ChessGameConsumer(AsyncWebsocketConsumer):
             move_history = list(game.move_history) if game.move_history else []
             move_history.append({'from': from_pos, 'to': to_pos, 'piece': piece, 'bot': True})
             
-            await self.update_game(game_code, board, next_turn, move_history)
+            # CHECK FOR END-GAME CONDITIONS after bot move
+            game_status, winner, reason = ChessRules.check_game_status(board, next_turn)
             
+            # Update game in database
+            if game_status in ['checkmate', 'stalemate', 'draw']:
+                await self.finish_game(game_code, winner, game_status)
+            else:
+                await self.update_game(game_code, board, next_turn, move_history)
+            
+            # Broadcast bot's move
             await self.channel_layer.group_send(self.room_group_name, {
                 'type': 'game_update',
                 'board_state': board,
                 'current_turn': next_turn,
                 'move': {'from': from_pos, 'to': to_pos, 'piece': piece, 'bot': True}
             })
+            
+            # Handle end-game notification
+            if game_status in ['checkmate', 'stalemate', 'draw']:
+                await self.channel_layer.group_send(self.room_group_name, {
+                    'type': 'game_over',
+                    'status': game_status,
+                    'winner': winner,
+                    'reason': reason
+                })
+            elif game_status == 'check':
+                # Notify if bot put player in check
+                await self.channel_layer.group_send(self.room_group_name, {
+                    'type': 'check_notification',
+                    'color': next_turn
+                })
     
     async def handle_resign(self):
         game = await self.get_game()
@@ -393,6 +527,7 @@ class ChessGameConsumer(AsyncWebsocketConsumer):
     async def game_over(self, event):
         await self.send(text_data=json.dumps({
             'type': 'game_over',
+            'status': event.get('status', 'finished'),
             'winner': event['winner'],
             'reason': event['reason']
         }))
@@ -445,8 +580,14 @@ class ChessGameConsumer(AsyncWebsocketConsumer):
         game.save()
     
     @database_sync_to_async
-    def finish_game(self, code, winner):
+    def finish_game(self, code, winner, status='finished'):
         game = ChessGame.objects.get(code=code)
-        game.status = 'finished'
+        game.status = status if status in ['checkmate', 'stalemate', 'draw'] else 'finished'
         game.winner = winner
         game.save()
+    
+    async def check_notification(self, event):
+        await self.send(text_data=json.dumps({
+            'type': 'check',
+            'color': event['color']
+        }))
