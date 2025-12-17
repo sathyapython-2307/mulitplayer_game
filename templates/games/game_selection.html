@@ -1,11 +1,24 @@
 {% extends 'base.html' %}
 {% block title %}Select Game{% endblock %}
+{% block extra_css %}
+<style>
+    .game-card {
+        transition: all 0.3s ease;
+        border: 2px solid transparent;
+    }
+    .game-card:hover {
+        transform: translateY(-5px);
+        border-color: var(--teal-primary);
+        box-shadow: 0 10px 30px rgba(13, 148, 136, 0.2);
+    }
+</style>
+{% endblock %}
 {% block content %}
 <div class="row justify-content-center">
     <div class="col-lg-10">
         <div class="text-center mb-5">
             <h2 class="display-5 fw-bold text-warm">Choose Your Game</h2>
-            <p class="lead text-muted">Select a game mode to start playing</p>
+            <p class="lead text-muted">Select a game to start playing</p>
         </div>
         
         <div class="row g-4">
@@ -18,8 +31,8 @@
                         </div>
                         <h3 class="card-title mb-3">Tic-Tac-Toe</h3>
                         <p class="card-text text-muted mb-4">
-                            Classic 3x3 grid game. Create custom rooms, invite friends, 
-                            or join existing games. Supports up to 4 players per room.
+                            Classic 3x3 grid game. Create rooms, invite friends, 
+                            or join existing games.
                         </p>
                         <div class="d-grid gap-2">
                             <a href="{% url 'lobby' %}" class="btn btn-warm btn-lg">
@@ -46,7 +59,7 @@
                         <h3 class="card-title mb-3">Chess</h3>
                         <p class="card-text text-muted mb-4">
                             Strategic multiplayer chess. Play against real players 
-                            or challenge our AI bot for practice.
+                            or challenge our AI bot.
                         </p>
                         <div class="d-grid gap-2">
                             <a href="{% url 'chess_lobby' %}" class="btn btn-warm btn-lg">
@@ -73,15 +86,15 @@
                     </div>
                     <div class="card-body">
                         <div class="row text-center">
-                            <div class="col-md-4">
+                            <div class="col-4">
                                 <h3 class="text-warm">{{ user.stats.games_played }}</h3>
                                 <p class="text-muted mb-0">Games Played</p>
                             </div>
-                            <div class="col-md-4">
+                            <div class="col-4">
                                 <h3 class="text-warm">{{ user.stats.games_won }}</h3>
                                 <p class="text-muted mb-0">Games Won</p>
                             </div>
-                            <div class="col-md-4">
+                            <div class="col-4">
                                 <h3 class="text-warm">{{ user.stats.score }}</h3>
                                 <p class="text-muted mb-0">Total Score</p>
                             </div>
@@ -92,17 +105,4 @@
         </div>
     </div>
 </div>
-{% endblock %}
-{% block extra_css %}
-<style>
-    .game-card {
-        transition: all 0.3s ease;
-        border: 2px solid transparent;
-    }
-    .game-card:hover {
-        transform: translateY(-10px);
-        border-color: var(--teal-primary);
-        box-shadow: 0 10px 30px rgba(13, 148, 136, 0.2);
-    }
-</style>
 {% endblock %}

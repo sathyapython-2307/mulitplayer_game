@@ -1,7 +1,8 @@
 import json
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
-from .models import GameRoom, ChatMessage
+from .models import GameRoom, ChatMessage, ChessGame
+
 
 class GameConsumer(AsyncWebsocketConsumer):
     async def connect(self):
@@ -161,28 +162,96 @@ class MatchmakingConsumer(AsyncWebsocketConsumer):
         return room
 
 
-
-class ChessConsumer(AsyncWebsocketConsumer):
+# Chess Matchmaking Consumer - handles player vs player matching
+class ChessMatchmakingConsumer(AsyncWebsocketConsumer):
     waiting_players = []
     
     async def connect(self):
-        self.game_code = self.scope['url_route']['kwargs'].get('game_code')
         self.user = self.scope['user']
+        await self.accept()
         
-        if self.game_code:
-            # Join existing game
-            self.room_group_name = f'chess_{self.game_code}'
-            await self.channel_layer.group_add(self.room_group_name, self.channel_name)
-            await self.accept()
-            await self.send_game_state()
-        else:
-            # Matchmaking
-            await self.accept()
-            await self.handle_matchmaking()
+        # Remove any existing entry for this user
+        ChessMatchmakingConsumer.waiting_players = [
+            p for p in ChessMatchmakingConsumer.waiting_players 
+            if p['user_id'] != self.user.id
+        ]
+        
+        # Add to waiting list
+        ChessMatchmakingConsumer.waiting_players.append({
+            'channel': self.channel_name,
+            'user': self.user.username,
+            'user_id': self.user.id
+        })
+        
+        # Try to match
+        await self.try_match()
     
     async def disconnect(self, close_code):
-        if hasattr(self, 'room_group_name'):
-            await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
+        # Remove from waiting list
+        ChessMatchmakingConsumer.waiting_players = [
+            p for p in ChessMatchmakingConsumer.waiting_players 
+            if p['channel'] != self.channel_name
+        ]
+    
+    async def try_match(self):
+        # Need at least 2 players to match
+        if len(ChessMatchmakingConsumer.waiting_players) >= 2:
+            p1 = ChessMatchmakingConsumer.waiting_players.pop(0)
+            p2 = ChessMatchmakingConsumer.waiting_players.pop(0)
+            
+            # Create game
+            game = await self.create_chess_game(p1['user_id'], p2['user_id'])
+            
+            # Notify both players
+            for player in [p1, p2]:
+                await self.channel_layer.send(player['channel'], {
+                    'type': 'match_found',
+                    'game_code': game.code
+                })
+        else:
+            # Send waiting status
+            await self.send(text_data=json.dumps({
+                'type': 'waiting',
+                'message': 'Searching for opponent...',
+                'queue_position': len(ChessMatchmakingConsumer.waiting_players)
+            }))
+    
+    async def match_found(self, event):
+        await self.send(text_data=json.dumps({
+            'type': 'match_found',
+            'game_code': event['game_code']
+        }))
+    
+    @database_sync_to_async
+    def create_chess_game(self, white_id, black_id):
+        from django.contrib.auth.models import User
+        white_player = User.objects.get(id=white_id)
+        black_player = User.objects.get(id=black_id)
+        
+        game = ChessGame.objects.create(
+            white_player=white_player,
+            black_player=black_player,
+            is_bot_game=False,
+            status='playing'
+        )
+        return game
+
+
+# Chess Game Consumer - handles actual gameplay
+class ChessGameConsumer(AsyncWebsocketConsumer):
+    async def connect(self):
+        self.game_code = self.scope['url_route']['kwargs']['game_code']
+        self.room_group_name = f'chess_{self.game_code}'
+        self.user = self.scope['user']
+        
+        await self.channel_layer.group_add(self.room_group_name, self.channel_name)
+        await self.accept()
+        
+        # Send current game state
+        await self.send_game_state()
+    
+    async def disconnect(self, close_code):
+        await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
     
     async def receive(self, text_data):
         data = json.loads(text_data)
@@ -192,39 +261,8 @@ class ChessConsumer(AsyncWebsocketConsumer):
             await self.handle_move(data)
         elif msg_type == 'resign':
             await self.handle_resign()
-    
-    async def handle_matchmaking(self):
-        ChessConsumer.waiting_players.append({
-            'channel': self.channel_name,
-            'user': self.user.username,
-            'user_id': self.user.id
-        })
-        
-        # Only match if we have 2 or more players
-        if len(ChessConsumer.waiting_players) >= 2:
-            # Match two players
-            p1 = ChessConsumer.waiting_players.pop(0)
-            p2 = ChessConsumer.waiting_players.pop(0)
-            game = await self.create_game(p1['user_id'], p2['user_id'], False)
-            
-            for player in [p1, p2]:
-                await self.channel_layer.send(player['channel'], {
-                    'type': 'match_found',
-                    'game_code': game.code
-                })
-        # If still waiting, send waiting status
-        else:
-            await self.send(text_data=json.dumps({
-                'type': 'waiting',
-                'message': 'Searching for opponent...'
-            }))
-    
-    async def match_found(self, event):
-        await self.send(text_data=json.dumps({
-            'type': 'match_found',
-            'game_code': event['game_code'],
-            'is_bot': event.get('is_bot', False)
-        }))
+        elif msg_type == 'get_state':
+            await self.send_game_state()
     
     async def handle_move(self, data):
         from_pos = data['from']
@@ -232,71 +270,111 @@ class ChessConsumer(AsyncWebsocketConsumer):
         
         game = await self.get_game()
         if not game:
+            await self.send(text_data=json.dumps({'type': 'error', 'message': 'Game not found'}))
             return
         
         # Validate turn
         player_color = await self.get_player_color(game)
+        if not player_color:
+            await self.send(text_data=json.dumps({'type': 'error', 'message': 'Not a player in this game'}))
+            return
+            
         if game.current_turn != player_color:
+            await self.send(text_data=json.dumps({'type': 'error', 'message': 'Not your turn'}))
             return
         
         # Make move
-        if from_pos in game.board_state:
-            piece = game.board_state[from_pos]
-            game.board_state[to_pos] = piece
-            del game.board_state[from_pos]
-            game.current_turn = 'black' if game.current_turn == 'white' else 'white'
-            game.move_history.append({'from': from_pos, 'to': to_pos, 'piece': piece})
-            await self.save_game(game)
-            
-            # Broadcast move
-            await self.channel_layer.group_send(self.room_group_name, {
-                'type': 'game_update',
-                'board_state': game.board_state,
-                'current_turn': game.current_turn,
-                'move': {'from': from_pos, 'to': to_pos}
-            })
-            
-            # Bot move if needed
-            if game.is_bot_game and game.current_turn == game.bot_color:
-                await self.make_bot_move(game)
-    
-    async def make_bot_move(self, game):
-        from .chess_bot import ChessBot
-        import asyncio
+        board = game.board_state
+        if from_pos not in board:
+            await self.send(text_data=json.dumps({'type': 'error', 'message': 'No piece at position'}))
+            return
         
-        await asyncio.sleep(1)  # Delay for realism
+        piece = board[from_pos]
+        
+        # Validate piece belongs to player
+        if piece[0] != player_color[0]:
+            await self.send(text_data=json.dumps({'type': 'error', 'message': 'Not your piece'}))
+            return
+        
+        # Execute move
+        board[to_pos] = piece
+        del board[from_pos]
+        
+        # Update game state
+        next_turn = 'black' if game.current_turn == 'white' else 'white'
+        move_history = list(game.move_history) if game.move_history else []
+        move_history.append({'from': from_pos, 'to': to_pos, 'piece': piece})
+        
+        await self.update_game(game.code, board, next_turn, move_history)
+        
+        # Broadcast move to all players
+        await self.channel_layer.group_send(self.room_group_name, {
+            'type': 'game_update',
+            'board_state': board,
+            'current_turn': next_turn,
+            'move': {'from': from_pos, 'to': to_pos, 'piece': piece}
+        })
+        
+        # Handle bot move if needed (completely non-blocking)
+        if game.is_bot_game and next_turn == game.bot_color:
+            # Notify UI that bot is thinking
+            await self.channel_layer.group_send(self.room_group_name, {
+                'type': 'bot_thinking',
+                'thinking': True
+            })
+            # Schedule bot move as background task (doesn't block user's move)
+            import asyncio
+            asyncio.create_task(self.make_bot_move(game.code))
+    
+    async def make_bot_move(self, game_code):
+        import asyncio
+        from .chess_bot import ChessBot
+        
+        # Bot thinks for exactly 2 seconds
+        await asyncio.sleep(2)
+        
+        game = await self.get_game_by_code(game_code)
+        if not game or game.status != 'playing':
+            return
         
         move = ChessBot.make_move(game.board_state, game.bot_color)
         if move:
             from_pos, to_pos = move
-            piece = game.board_state[from_pos]
-            game.board_state[to_pos] = piece
-            del game.board_state[from_pos]
-            game.current_turn = 'white' if game.current_turn == 'black' else 'black'
-            game.move_history.append({'from': from_pos, 'to': to_pos, 'piece': piece, 'bot': True})
-            await self.save_game(game)
+            board = game.board_state
+            piece = board[from_pos]
+            board[to_pos] = piece
+            del board[from_pos]
+            
+            next_turn = 'white' if game.current_turn == 'black' else 'black'
+            move_history = list(game.move_history) if game.move_history else []
+            move_history.append({'from': from_pos, 'to': to_pos, 'piece': piece, 'bot': True})
+            
+            await self.update_game(game_code, board, next_turn, move_history)
             
             await self.channel_layer.group_send(self.room_group_name, {
                 'type': 'game_update',
-                'board_state': game.board_state,
-                'current_turn': game.current_turn,
-                'move': {'from': from_pos, 'to': to_pos, 'bot': True}
+                'board_state': board,
+                'current_turn': next_turn,
+                'move': {'from': from_pos, 'to': to_pos, 'piece': piece, 'bot': True}
             })
     
     async def handle_resign(self):
         game = await self.get_game()
-        if game:
-            player_color = await self.get_player_color(game)
-            winner = 'black' if player_color == 'white' else 'white'
-            game.status = 'finished'
-            game.winner = winner
-            await self.save_game(game)
-            
-            await self.channel_layer.group_send(self.room_group_name, {
-                'type': 'game_over',
-                'winner': winner,
-                'reason': 'resignation'
-            })
+        if not game:
+            return
+        
+        player_color = await self.get_player_color(game)
+        if not player_color:
+            return
+        
+        winner = 'black' if player_color == 'white' else 'white'
+        await self.finish_game(game.code, winner)
+        
+        await self.channel_layer.group_send(self.room_group_name, {
+            'type': 'game_over',
+            'winner': winner,
+            'reason': 'resignation'
+        })
     
     async def game_update(self, event):
         await self.send(text_data=json.dumps({
@@ -304,6 +382,12 @@ class ChessConsumer(AsyncWebsocketConsumer):
             'board_state': event['board_state'],
             'current_turn': event['current_turn'],
             'move': event['move']
+        }))
+    
+    async def bot_thinking(self, event):
+        await self.send(text_data=json.dumps({
+            'type': 'bot_thinking',
+            'thinking': event['thinking']
         }))
     
     async def game_over(self, event):
@@ -316,12 +400,15 @@ class ChessConsumer(AsyncWebsocketConsumer):
     async def send_game_state(self):
         game = await self.get_game()
         if game:
+            player_color = await self.get_player_color(game)
             await self.send(text_data=json.dumps({
                 'type': 'game_state',
                 'board_state': game.board_state,
                 'current_turn': game.current_turn,
                 'is_bot_game': game.is_bot_game,
-                'bot_color': game.bot_color
+                'bot_color': game.bot_color,
+                'player_color': player_color,
+                'status': game.status
             }))
     
     @database_sync_to_async
@@ -332,8 +419,11 @@ class ChessConsumer(AsyncWebsocketConsumer):
             return None
     
     @database_sync_to_async
-    def save_game(self, game):
-        game.save()
+    def get_game_by_code(self, code):
+        try:
+            return ChessGame.objects.get(code=code)
+        except ChessGame.DoesNotExist:
+            return None
     
     @database_sync_to_async
     def get_player_color(self, game):
@@ -341,21 +431,22 @@ class ChessConsumer(AsyncWebsocketConsumer):
             return 'white'
         elif game.black_player_id == self.user.id:
             return 'black'
+        # For bot games, if user is white player
+        elif game.is_bot_game and game.white_player_id == self.user.id:
+            return 'white'
         return None
     
     @database_sync_to_async
-    def create_game(self, white_id, black_id, is_bot):
-        from django.contrib.auth.models import User
-        import random
-        
-        white_player = User.objects.get(id=white_id)
-        black_player = User.objects.get(id=black_id) if black_id else None
-        
-        game = ChessGame.objects.create(
-            white_player=white_player,
-            black_player=black_player,
-            is_bot_game=is_bot,
-            bot_color='black' if is_bot else None,
-            status='playing'
-        )
-        return game
+    def update_game(self, code, board_state, current_turn, move_history):
+        game = ChessGame.objects.get(code=code)
+        game.board_state = board_state
+        game.current_turn = current_turn
+        game.move_history = move_history
+        game.save()
+    
+    @database_sync_to_async
+    def finish_game(self, code, winner):
+        game = ChessGame.objects.get(code=code)
+        game.status = 'finished'
+        game.winner = winner
+        game.save()

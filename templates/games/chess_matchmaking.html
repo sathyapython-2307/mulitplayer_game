@@ -2,11 +2,23 @@
 {% block title %}Finding Chess Match{% endblock %}
 {% block extra_css %}
 <style>
-    .chess-spinner { width: 100px; height: 100px; border-width: 5px; }
-    .pulse { animation: pulse 2s infinite; }
+    .matchmaking-spinner { 
+        width: 80px; 
+        height: 80px; 
+        border-width: 4px; 
+    }
+    .pulse { 
+        animation: pulse 2s infinite; 
+    }
     @keyframes pulse {
         0%, 100% { transform: scale(1); opacity: 1; }
         50% { transform: scale(1.1); opacity: 0.7; }
+    }
+    .queue-info {
+        background: var(--teal-bg);
+        padding: 10px 20px;
+        border-radius: 20px;
+        display: inline-block;
     }
 </style>
 {% endblock %}
@@ -15,18 +27,30 @@
     <div class="col-md-6">
         <div class="card">
             <div class="card-header text-center">
-                <h5 class="mb-0"><i class="bi bi-chess-queen"></i> Chess Matchmaking</h5>
+                <h5 class="mb-0"><i class="bi bi-people-fill"></i> Finding Opponent</h5>
             </div>
             <div class="card-body text-center py-5">
-                <div class="spinner-border chess-spinner text-warm pulse mb-4" role="status"></div>
-                <h4 id="status-text">Finding opponent...</h4>
-                <p class="text-muted" id="status-sub">Searching for another player</p>
-                <div id="waiting-notice" class="alert alert-warning d-none mt-4">
-                    <i class="bi bi-hourglass-split"></i> <strong>Still searching...</strong><br>
-                    <small>Waiting for another player to join. You can also <a href="{% url 'chess_vs_bot' %}" class="alert-link">play vs bot</a> instead.</small>
+                <div class="spinner-border matchmaking-spinner text-warm pulse mb-4" role="status" id="spinner"></div>
+                
+                <h4 id="status-text">Connecting...</h4>
+                <p class="text-muted" id="status-sub">Please wait</p>
+                
+                <div class="queue-info mt-3" id="queue-info" style="display: none;">
+                    <i class="bi bi-clock"></i> <span id="wait-time">0</span>s waiting
                 </div>
+                
+                <div id="waiting-notice" class="alert alert-info mt-4" style="display: none;">
+                    <i class="bi bi-info-circle"></i> <strong>Still searching...</strong><br>
+                    <small>No opponents found yet. You can 
+                        <a href="{% url 'chess_vs_bot' %}" class="alert-link">play vs bot</a> 
+                        for instant game.
+                    </small>
+                </div>
+                
                 <div class="mt-4">
-                    <a href="{% url 'chess_lobby' %}" class="btn btn-outline-warm">Cancel</a>
+                    <a href="{% url 'chess_lobby' %}" class="btn btn-outline-warm" id="cancel-btn">
+                        <i class="bi bi-x-lg"></i> Cancel
+                    </a>
                 </div>
             </div>
         </div>
@@ -35,28 +59,87 @@
 {% endblock %}
 {% block extra_js %}
 <script>
-const wsScheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
-const socket = new WebSocket(`${wsScheme}://${window.location.host}/ws/chess/matchmaking/`);
+let socket = null;
+let waitTime = 0;
+let waitTimer = null;
 
-let waitingTimeout;
+function connect() {
+    const wsScheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    socket = new WebSocket(`${wsScheme}://${window.location.host}/ws/chess/matchmaking/`);
+    
+    socket.onopen = () => {
+        console.log('Connected to matchmaking');
+        document.getElementById('status-text').textContent = 'Searching for opponent...';
+        document.getElementById('status-sub').textContent = 'Waiting for another player to join';
+        document.getElementById('queue-info').style.display = 'inline-block';
+        
+        // Start wait timer
+        waitTimer = setInterval(() => {
+            waitTime++;
+            document.getElementById('wait-time').textContent = waitTime;
+            
+            // Show notice after 10 seconds
+            if (waitTime >= 10) {
+                document.getElementById('waiting-notice').style.display = 'block';
+            }
+        }, 1000);
+    };
+    
+    socket.onmessage = (e) => {
+        const data = JSON.parse(e.data);
+        console.log('Received:', data);
+        
+        if (data.type === 'match_found') {
+            clearInterval(waitTimer);
+            document.getElementById('spinner').classList.remove('pulse');
+            document.getElementById('status-text').textContent = '🎉 Opponent found!';
+            document.getElementById('status-sub').textContent = 'Starting game...';
+            document.getElementById('queue-info').style.display = 'none';
+            document.getElementById('waiting-notice').style.display = 'none';
+            document.getElementById('cancel-btn').style.display = 'none';
+            
+            // Redirect to game
+            setTimeout(() => {
+                window.location.href = `/chess/game/${data.game_code}/`;
+            }, 1000);
+        } else if (data.type === 'waiting') {
+            document.getElementById('status-text').textContent = 'Searching for opponent...';
+            document.getElementById('status-sub').textContent = data.message || 'Waiting for another player';
+        }
+    };
+    
+    socket.onclose = () => {
+        console.log('Disconnected from matchmaking');
+        // Only reconnect if we haven't found a match
+        if (!document.getElementById('cancel-btn').style.display === 'none') {
+            setTimeout(connect, 2000);
+        }
+    };
+    
+    socket.onerror = (e) => {
+        console.error('WebSocket error:', e);
+        document.getElementById('status-text').textContent = 'Connection error';
+        document.getElementById('status-sub').textContent = 'Retrying...';
+    };
+}
 
-socket.onmessage = (e) => {
-    const data = JSON.parse(e.data);
-    if (data.type === 'match_found') {
-        document.getElementById('status-text').textContent = 'Opponent found!';
-        document.getElementById('status-sub').textContent = 'Starting game...';
-        setTimeout(() => window.location.href = `/chess/game/${data.game_code}/`, 1500);
-    } else if (data.type === 'waiting') {
-        // Show waiting notice after 5 seconds
-        waitingTimeout = setTimeout(() => {
-            document.getElementById('waiting-notice').classList.remove('d-none');
-        }, 5000);
+// Cancel button - close socket before leaving
+document.getElementById('cancel-btn').addEventListener('click', (e) => {
+    if (socket) {
+        socket.close();
     }
-};
+    clearInterval(waitTimer);
+});
 
-socket.onerror = () => {
-    document.getElementById('status-text').textContent = 'Connection error';
-    document.getElementById('status-sub').textContent = 'Please try again';
-};
+// Start connection
+connect();
+
+// Cleanup on page leave
+window.addEventListener('beforeunload', () => {
+    if (socket) {
+        socket.close();
+    }
+    clearInterval(waitTimer);
+});
 </script>
 {% endblock %}
